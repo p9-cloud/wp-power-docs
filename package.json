@@ -21,31 +21,5 @@
 		"replace-string": "node ./replace-string.cjs",
 		"i18n": "wp i18n make-pot . languages/power_docs.pot",
 		"i18n:commit": "pnpm i18n && git add . && git commit --amend --no-edit"
-	},
-	"dependencies": {
-		"@power/general": "workspace:*",
-		"antd-toolkit": "workspace:*"
-	},
-	"devDependencies": {
-		"@power/eslint-config": "workspace:*",
-		"@power/tailwind-config": "workspace:*",
-		"@power/typescript-config": "workspace:*"
-	},
-	"dependenciesMeta": {
-		"@power/general": {
-			"injected": true
-		},
-		"antd-toolkit": {
-			"injected": true
-		},
-		"@power/eslint-config": {
-			"injected": true
-		},
-		"@power/tailwind-config": {
-			"injected": true
-		},
-		"@power/typescript-config": {
-			"injected": true
-		}
 	}
 }
