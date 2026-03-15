@@ -15,26 +15,7 @@
 
 **Power Docs** is a WordPress plugin for building rich knowledge-base pages and managing subscriber-based content monetization. It registers a hierarchical custom post type (`pd_doc`), integrates with WooCommerce for purchase-gated access, and provides a React/TypeScript admin panel built with Refine.dev.
 
-This plugin lives inside a **pnpm Turborepo monorepo** at `apps/power-docs/`. It depends on a sister plugin called **Powerhouse** (`j7-dev/wp-powerhouse`) which provides shared utilities, REST API infrastructure, Limit/Access models, and the frontend toolkit (`antd-toolkit`).
-
----
-
-## Monorepo Context
-
-```
-powerrepo/
-├── apps/
-│   ├── power-docs/        ← THIS PROJECT
-│   ├── powerhouse/        ← Required dependency plugin
-│   └── ...
-├── packages/
-│   ├── general/           ← @power/general shared package
-│   ├── eslint-config/     ← @power/eslint-config
-│   ├── tailwind-config/   ← @power/tailwind-config
-│   └── typescript-config/ ← @power/typescript-config
-```
-
-Workspace dependencies use `workspace:*` in `package.json`.
+This plugin depends on a sister plugin called **Powerhouse** (`j7-dev/wp-powerhouse`) which provides shared utilities, REST API infrastructure, Limit/Access models, and the frontend toolkit (`antd-toolkit`).
 
 ---
 
@@ -57,7 +38,7 @@ Workspace dependencies use `workspace:*` in `package.json`.
 | Framework | React 18 + TypeScript |
 | Build Tool | Vite 5 via `@kucrut/vite-for-wp` |
 | Admin Framework | Refine.dev (`@refinedev/core`, `@refinedev/antd`) |
-| UI Library | Ant Design 5 + `antd-toolkit` (monorepo workspace) |
+| UI Library | Ant Design 5 + `antd-toolkit` |
 | CSS | TailwindCSS + DaisyUI (prefix: `pc-`) |
 | State | `@tanstack/react-query` + Jotai atoms |
 | Routing | React Router v6 with `HashRouter` |
@@ -524,7 +505,6 @@ type TDocRecord = TDocBaseRecord & TLimit & {
 - Form submission uses `toFormData()` from `antd-toolkit` (handles empty arrays as `'[]'`)
 - Use `useEnv()` from `@/hooks` for typed env access (not directly from `antd-toolkit`)
 - Path alias `@/` → `js/src/`
-- `@power/general` → `../../packages/general/index.ts`
 - Jotai atoms defined in `atom.tsx` files alongside components that use them
 
 ---
@@ -577,7 +557,7 @@ Two custom widgets registered via `elementor/widgets/register`:
 ## Development Commands
 
 ```bash
-# Install all dependencies (run from monorepo root)
+# Install dependencies
 pnpm install
 
 # PHP dependencies (run from power-docs/)
@@ -670,4 +650,4 @@ $can_access = Access::can_access($doc_top_parent_id, $user_id);
 | `vite.config.ts` | Vite build config (port 5175, output: `js/dist`) |
 | `tailwind.config.cjs` | Tailwind + DaisyUI (`pc-` prefix, `power` theme) |
 | `composer.json` | PHP deps + PSR-4 autoload config |
-| `package.json` | JS scripts + workspace deps |
+| `package.json` | JS scripts + deps |

@@ -1,0 +1,20 @@
+[ACTIVITY] 知識庫授權與存取
+[ACTOR] Admin -> {specs/actors/Admin.md}
+[ACTOR] WooCommerce -> {specs/actors/WooCommerce.md}
+[ACTOR] Subscriber -> {specs/actors/Subscriber.md}
+[ACTOR] Guest -> {specs/actors/Guest.md}
+
+[STEP:1] @Admin {features/product/查詢商品列表.feature}
+[STEP:2] @Admin {features/product/綁定知識庫到商品.feature}
+[STEP:3] @Admin {features/product/更新商品知識庫綁定設定.feature}
+[STEP:4] @Admin {features/product/解除商品知識庫綁定.feature}
+[STEP:5] @WooCommerce {features/product/訂單完成自動授權.feature}
+[STEP:6] @Admin {features/user/查詢用戶列表.feature}
+[STEP:7] @Admin {features/user/開通知識庫權限.feature}
+[STEP:8] @Admin {features/user/撤銷知識庫權限.feature}
+[STEP:9] @Admin {features/user/更新用戶知識庫期限.feature}
+[DECISION:9a] 訪客身份為何？
+  [BRANCH:9a:已授權用戶] @Subscriber {features/doc/前台檢視知識庫.feature}
+  [BRANCH:9a:未授權用戶] @Subscriber {features/doc/前台檢視知識庫.feature}
+  [BRANCH:9a:未登入訪客] @Guest {features/doc/前台檢視知識庫.feature}
+[MERGE:9a]

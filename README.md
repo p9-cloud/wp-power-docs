@@ -52,7 +52,7 @@
 # 1. 安裝 PHP 依賴
 composer install --no-dev
 
-# 2. 安裝 Node.js 依賴 (在 monorepo 根目錄執行)
+# 2. 安裝 Node.js 依賴
 pnpm install
 
 # 3. 建置前端
@@ -149,13 +149,13 @@ power-docs/
 
 - PHP 8.0+
 - Node.js 18+
-- pnpm (monorepo 使用)
+- pnpm
 - Composer
 
 ### 開發設定
 
 ```bash
-# 安裝依賴 (在 monorepo 根目錄)
+# 安裝依賴
 pnpm install
 
 # 安裝 PHP 依賴 (在 power-docs/ 目錄)

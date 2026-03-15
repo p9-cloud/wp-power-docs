@@ -18,14 +18,14 @@ test.describe('[E2E] 前台搜尋功能', () => {
 	let ids: SetupIds
 	let docSlug: string
 
-	test.beforeAll(async ({ request }, { project }) => {
-		const baseURL = project.use.baseURL || 'http://localhost:8893'
+	test.beforeAll(async ({ request }, workerInfo) => {
+		const baseURL = workerInfo.project.use.baseURL || 'http://localhost:8893'
 		const nonce = getNonce()
 		opts = { request, baseURL, nonce }
 		ids = getSetupIds()
 
 		// 取得知識庫 slug
-		const { data: doc } = await wpGet<any>(opts, `${API.posts}/${ids.docId}`)
+		const { data: doc } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.docId}`)
 		docSlug = doc?.slug || ''
 	})
 
@@ -206,7 +206,7 @@ test.describe('[E2E] 前台搜尋功能', () => {
 
 	test.describe('免費知識庫搜尋', () => {
 		test('未登入用戶搜尋免費知識庫 — 正常渲染', async ({ browser }) => {
-			const { data: freeDoc } = await wpGet<any>(opts, `${API.posts}/${ids.freeDocId}`)
+			const { data: freeDoc } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.freeDocId}`)
 			test.skip(!freeDoc?.slug, '無法取得免費知識庫 slug')
 
 			const context = await browser.newContext()

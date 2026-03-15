@@ -1,0 +1,262 @@
+// Power Docs -- Entity Relationship Model
+// Version: 1.2.7 | Date: 2026-03-12
+
+// ==================== Enums ====================
+
+Enum post_status {
+  publish [note: '已發佈']
+  draft [note: '草稿']
+  pending [note: '送交審閱']
+  private [note: '私密']
+  trash [note: '已刪除']
+}
+
+Enum editor_type {
+  power_editor [note: 'Power Editor (BlockNote)，子章節建立時的預設值']
+  elementor [note: 'Elementor 編輯器']
+  empty [note: '空字串，知識庫首頁預設版型']
+}
+
+Enum need_access_type {
+  yes [note: '需要購買授權才能觀看']
+  no [note: '免費公開']
+}
+
+Enum product_type {
+  simple [note: '簡單商品']
+  grouped [note: '組合商品']
+  external [note: '外部商品']
+  variable [note: '可變商品']
+  variation [note: '商品變體']
+  subscription [note: '簡易訂閱']
+  variable_subscription [note: '可變訂閱']
+  subscription_variation [note: '訂閱變體']
+}
+
+Enum limit_type {
+  unlimited [note: '永久']
+  fixed [note: '固定天數']
+  follow_subscription [note: '跟隨訂閱，僅限 subscription/variable_subscription 商品']
+}
+
+Enum limit_unit {
+  day [note: '天']
+  month [note: '月']
+  year [note: '年']
+}
+
+// ==================== WordPress 核心表 ====================
+
+Table wp_posts {
+  ID bigint [pk, increment, note: '文章 ID']
+  post_author bigint [note: '作者 ID']
+  post_date datetime [note: '發佈日期']
+  post_date_gmt datetime [note: '發佈日期 (GMT)']
+  post_content longtext [note: '內容 HTML']
+  post_title text [not null, note: '標題']
+  post_status varchar [not null, note: '狀態，參照 post_status enum']
+  post_name varchar [note: '網址別名 (slug)']
+  post_parent bigint [default: 0, note: '父文章 ID，0=根層級']
+  post_type varchar [not null, note: '文章類型，Power Docs 使用 pd_doc']
+  menu_order int [default: 0, note: '排序順序，排序章節功能會更新此值']
+  post_modified datetime [note: '修改日期，前台顯示「最近修改時間」']
+
+  indexes {
+    (post_type, post_status, post_parent) [name: 'type_status_parent']
+    (post_parent) [name: 'post_parent']
+  }
+
+  Note: '''
+    Power Docs 使用 post_type = "pd_doc" 的文章。
+    階層結構：知識庫(root, parent=0) -> 章節(depth=1) -> 單元(depth=2)，最大深度 2 層。
+
+    相關 Features：
+    - 建立知識庫：INSERT，post_type=pd_doc
+    - 更新知識庫：UPDATE post_title/post_content/post_status/post_name
+    - 刪除知識庫：DELETE
+    - 複製知識庫：INSERT（複製根+所有子章節，post_type 保持 pd_doc）
+    - 排序章節：UPDATE menu_order + post_parent
+    - 查詢知識庫列表：SELECT WHERE post_type=pd_doc AND post_parent=0
+    - 查詢知識庫詳情：SELECT + children（子章節）
+  '''
+}
+
+Table wp_postmeta {
+  meta_id bigint [pk, increment]
+  post_id bigint [ref: > wp_posts.ID, note: '對應文章 ID']
+  meta_key varchar [not null, note: 'Meta 鍵名']
+  meta_value longtext [note: 'Meta 值']
+
+  indexes {
+    (post_id, meta_key) [name: 'post_id_meta_key']
+  }
+
+  Note: '''
+    Power Docs 知識庫使用的 meta_key（post_type=pd_doc）：
+    - editor: 編輯器類型 (power-editor / elementor / 空字串)
+      建立子章節時預設為 power-editor。
+      切換為 power-editor 時會清除所有 _elementor_ 開頭的 meta。
+    - bg_images: 背景圖 attachment ID (僅根知識庫)
+      上傳時存 attachment ID，傳 "delete" 時清空。
+    - need_access: 是否需要授權 (yes / no, 僅根知識庫)
+    - pd_keywords: 搜尋關鍵字 JSON (僅根知識庫)
+      建立根知識庫時自動設定 1 筆預設關鍵字。
+    - pd_keywords_label: 關鍵字標籤文字 (僅根知識庫)
+      建立根知識庫時預設為「大家都在搜：」。
+    - unauthorized_redirect_url: 未授權跳轉網址 (僅根知識庫)
+      建立根知識庫時預設為 site_url("404")。
+    - _elementor_data: Elementor 頁面資料 (由 Elementor 管理)
+    - _elementor_css: Elementor CSS 快取 (由 Elementor 管理)
+
+    WooCommerce 商品使用的 meta_key：
+    - bound_docs_data: 綁定的知識庫授權資料 JSON
+      格式：[{id, limit_type, limit_value, limit_unit}, ...]
+  '''
+}
+
+Table wp_users {
+  ID bigint [pk, increment, note: '用戶 ID']
+  user_login varchar [unique, not null, note: '帳號']
+  user_email varchar [not null, note: '電子信箱']
+  user_nicename varchar [note: '別名']
+  display_name varchar [note: '顯示名稱']
+  user_registered datetime [note: '註冊日期']
+
+  indexes {
+    (user_login) [unique, name: 'user_login_key']
+    (user_email) [name: 'user_email']
+  }
+
+  Note: '''
+    WordPress 用戶表。
+    Power Docs 透過 ph_access_itemmeta 管理用戶的知識庫存取權限。
+
+    查詢用戶列表支援搜尋欄位：ID, user_login, user_email, user_nicename, display_name。
+  '''
+}
+
+Table wp_usermeta {
+  umeta_id bigint [pk, increment]
+  user_id bigint [ref: > wp_users.ID, note: '對應用戶 ID']
+  meta_key varchar [not null, note: 'Meta 鍵名']
+  meta_value longtext [note: 'Meta 值']
+
+  indexes {
+    (user_id, meta_key) [name: 'user_id_meta_key']
+  }
+
+  Note: '''
+    WordPress 用戶 meta 表。
+    Power Docs 透過 wp_capabilities meta 檢查 manage_options 權限。
+  '''
+}
+
+// ==================== WordPress Transient (快取) ====================
+
+Table wp_options {
+  option_id bigint [pk, increment]
+  option_name varchar [unique, not null, note: 'Option 名稱']
+  option_value longtext [note: 'Option 值']
+  autoload varchar [default: 'yes']
+
+  Note: '''
+    WordPress options 表，用於存放 transient 快取。
+    Power Docs 使用的 transient：
+    - _transient_power_docs_get_children_posts_html_{post_id}:
+      知識庫子章節 HTML 快取。
+      更新/刪除知識庫時清除對應 transient。
+  '''
+}
+
+// ==================== Powerhouse 擴充表 ====================
+
+Table wp_ph_access_itemmeta {
+  meta_id bigint [pk, increment]
+  post_id bigint [ref: > wp_posts.ID, note: '知識庫根文章 ID']
+  user_id bigint [ref: > wp_users.ID, note: '用戶 ID']
+  meta_key varchar [not null, note: '固定為 expire_date']
+  meta_value longtext [note: '到期日期字串，空字串=永久']
+
+  indexes {
+    (post_id, user_id, meta_key) [name: 'post_user_key']
+    (user_id, meta_key) [name: 'user_key']
+  }
+
+  Note: '''
+    Powerhouse 提供的存取權限表。
+    Power Docs 用此表記錄用戶對知識庫的存取權限。
+
+    meta_key 固定為 "expire_date"，meta_value 為到期日期。
+    空字串或未來日期 = 有效；過去日期 = 已過期。
+
+    相關 Features：
+    - 開通知識庫權限：INSERT (user_ids + item_ids + expire_date)
+    - 撤銷知識庫權限：DELETE (user_ids + item_ids)
+    - 更新用戶知識庫期限：UPDATE meta_value (expire_date)
+    - 訂單完成自動授權：INSERT (根據 bound_docs_data 的 limit 計算 expire_date)
+    - 前台檢視知識庫：SELECT 檢查存取權限 (can_access)
+    - 查詢用戶列表：JOIN 查詢 granted_docs 虛擬欄位
+
+    granted_docs 篩選查詢使用 HAVING COUNT 實現交集邏輯：
+    SELECT user_id FROM wp_ph_access_itemmeta
+    WHERE post_id IN (100, 200) AND meta_key = 'expire_date'
+    GROUP BY user_id
+    HAVING COUNT(DISTINCT post_id) = 2
+  '''
+}
+
+// ==================== WooCommerce 表 ====================
+
+Table wp_wc_orders {
+  id bigint [pk, increment, note: '訂單 ID']
+  customer_id bigint [ref: > wp_users.ID, note: '顧客 ID，0=訪客']
+  status varchar [not null, note: '訂單狀態']
+  date_created_gmt datetime [note: '建立日期']
+
+  Note: '''
+    WooCommerce 訂單表（HPOS 模式）。
+    Power Docs 監聽 woocommerce_order_status_completed hook。
+
+    訂單完成自動授權流程：
+    1. 訂單 status 變為 completed
+    2. 取得 customer_id（0 則跳過，訪客訂單不授權）
+    3. 遍歷訂單中每個商品的 bound_docs_data meta
+    4. 對每個綁定的知識庫，根據 limit_type 計算 expire_date
+    5. 呼叫 grant_user 寫入 wp_ph_access_itemmeta
+  '''
+}
+
+Table wp_wc_orders_meta {
+  id bigint [pk, increment]
+  order_id bigint [ref: > wp_wc_orders.id, note: '訂單 ID']
+  meta_key varchar [not null]
+  meta_value longtext
+
+  Note: '''WooCommerce 訂單 meta 表'''
+}
+
+// ==================== WordPress Attachments ====================
+
+Table wp_posts_attachments {
+  ID bigint [pk, note: '等同 wp_posts.ID，post_type=attachment']
+  post_parent bigint [note: '關聯的文章 ID']
+  guid varchar [note: '檔案 URL']
+  post_mime_type varchar [note: 'MIME 類型']
+
+  Note: '''
+    WordPress 附件表（實際存在 wp_posts 中，post_type=attachment）。
+    Power Docs 的 bg_images meta 儲存 attachment ID，
+    查詢詳情時回傳完整的圖片資訊 (id, url, width, height)。
+    bg_images 上傳/刪除透過更新知識庫 API 的 multipart/form-data 處理。
+  '''
+}
+
+// ==================== References ====================
+
+// 知識庫階層關係（自引用）：知識庫 -> 章節 -> 單元
+Ref: wp_posts.post_parent > wp_posts.ID
+
+// 相容性遷移邏輯引用：
+// 執行相容性遷移時，掃描所有 post_type=pd_doc 的 wp_postmeta，
+// 有 _elementor_data 但無 editor 的章節 -> 設為 elementor
+// 無 _elementor_data 且無 editor 的章節 -> 設為 power-editor

@@ -1,5 +1,5 @@
 /**
- * [E2E] 安全性測試 — security.spec.ts
+ * [P1] 安全性測試 — security.spec.ts
  *
  * 驗證認證與授權機制：
  * - 未登入用戶無法存取管理 API
@@ -12,12 +12,12 @@ import { wpGet, wpPost, wpDelete, type ApiOptions } from '../helpers/api-client.
 import { getNonce, getSetupIds, type SetupIds } from '../global-setup.js'
 import { API } from '../fixtures/test-data.js'
 
-test.describe('[E2E] 安全性測試', () => {
+test.describe('[P1] 安全性測試', () => {
 	let opts: ApiOptions
 	let ids: SetupIds
 
-	test.beforeAll(async ({ request }, { project }) => {
-		const baseURL = project.use.baseURL || 'http://localhost:8893'
+	test.beforeAll(async ({ request }, workerInfo) => {
+		const baseURL = workerInfo.project.use.baseURL || 'http://localhost:8893'
 		const nonce = getNonce()
 		opts = { request, baseURL, nonce }
 		ids = getSetupIds()
@@ -61,7 +61,7 @@ test.describe('[E2E] 安全性測試', () => {
 						headers: { 'Content-Type': 'application/json' },
 						data: {
 							post_type: 'pd_doc',
-							post_title: 'Unauthorized Create Test',
+							name: 'Unauthorized Create Test',
 						},
 					},
 				)
@@ -108,7 +108,7 @@ test.describe('[E2E] 安全性測試', () => {
 
 			const { status } = await wpPost(emptyOpts, API.posts, {
 				post_type: 'pd_doc',
-				post_title: 'Empty Nonce Test',
+				name: 'Empty Nonce Test',
 			})
 
 			expect([401, 403]).toContain(status)
@@ -159,7 +159,7 @@ test.describe('[E2E] 安全性測試', () => {
 							},
 							data: {
 								post_type: 'pd_doc',
-								post_title: 'Subscriber Create Test',
+								name: 'Subscriber Create Test',
 							},
 						},
 					)
@@ -217,7 +217,7 @@ test.describe('[E2E] 安全性測試', () => {
 
 	test.describe('前台搜尋注入防護', () => {
 		test('前台搜尋 XSS script — 不造成腳本注入', async ({ page }) => {
-			const { data: freeDoc } = await wpGet<any>(opts, `${API.posts}/${ids.freeDocId}`)
+			const { data: freeDoc } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.freeDocId}`)
 			test.skip(!freeDoc?.slug, '無法取得免費知識庫 slug')
 
 			let alertFired = false
@@ -239,7 +239,7 @@ test.describe('[E2E] 安全性測試', () => {
 		})
 
 		test('前台搜尋 SQL injection — 不造成伺服器錯誤', async ({ page }) => {
-			const { data: freeDoc } = await wpGet<any>(opts, `${API.posts}/${ids.freeDocId}`)
+			const { data: freeDoc } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.freeDocId}`)
 			test.skip(!freeDoc?.slug, '無法取得免費知識庫 slug')
 
 			const response = await page.goto(
@@ -251,7 +251,7 @@ test.describe('[E2E] 安全性測試', () => {
 		})
 
 		test('前台搜尋 img onerror — 不造成腳本注入', async ({ page }) => {
-			const { data: freeDoc } = await wpGet<any>(opts, `${API.posts}/${ids.freeDocId}`)
+			const { data: freeDoc } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.freeDocId}`)
 			test.skip(!freeDoc?.slug, '無法取得免費知識庫 slug')
 
 			let alertFired = false

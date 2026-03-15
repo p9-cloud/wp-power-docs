@@ -8,11 +8,10 @@
 ## Setup & Dev Server
 
 ```bash
-# From monorepo root
+# Install dependencies
 pnpm install
 
 # Start Vite dev server (port 5175)
-cd apps/power-docs
 pnpm dev
 
 # Build for production
@@ -68,7 +67,6 @@ js/src/
 ```typescript
 // tsconfig.json / vite.config.ts
 '@/*'           → 'js/src/*'
-'@power/general' → '../../packages/general/index.ts'
 ```
 
 ---

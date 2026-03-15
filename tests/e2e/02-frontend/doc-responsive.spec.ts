@@ -28,15 +28,15 @@ test.describe('[E2E] 前台響應式版面', () => {
 	let chapter1Slug: string
 	let docSlug: string
 
-	test.beforeAll(async ({ request }, { project }) => {
-		const baseURL = project.use.baseURL || 'http://localhost:8893'
+	test.beforeAll(async ({ request }, workerInfo) => {
+		const baseURL = workerInfo.project.use.baseURL || 'http://localhost:8893'
 		const nonce = getNonce()
 		opts = { request, baseURL, nonce }
 		ids = getSetupIds()
 
 		const [ch1Res, docRes] = await Promise.all([
-			wpGet<any>(opts, `${API.posts}/${ids.chapter1Id}`),
-			wpGet<any>(opts, `${API.posts}/${ids.docId}`),
+			wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.chapter1Id}`),
+			wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.docId}`),
 		])
 		chapter1Slug = ch1Res.data?.slug || ''
 		docSlug = docRes.data?.slug || ''

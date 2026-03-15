@@ -22,14 +22,10 @@
 ### First-Time Setup
 
 ```bash
-# 1. Clone/pull the monorepo
-cd powerrepo
-
-# 2. Install all JS dependencies (run from monorepo root)
+# 1. Install JS dependencies
 pnpm install
 
-# 3. Install PHP dependencies
-cd apps/power-docs
+# 2. Install PHP dependencies
 composer install
 
 # 4. Copy plugin to WordPress
@@ -64,7 +60,6 @@ When `WP_ENVIRONMENT_TYPE === 'local'`:
 
 ```bash
 # Terminal 1: Start Vite dev server
-cd apps/power-docs
 pnpm dev
 # Server starts at http://localhost:5175
 
@@ -109,7 +104,7 @@ pnpm format
 ```
 
 Config files:
-- `.eslintrc.cjs` — ESLint config (extends `@power/eslint-config`)
+- `.eslintrc.cjs` — ESLint config
 - `.prettierrc` — Prettier config
 
 ### PHP
@@ -250,10 +245,10 @@ Currently, the admin panel uses Chinese text directly (not i18n'd via WP). If ne
 | `package.json` | JS deps, all `pnpm` scripts |
 | `vite.config.ts` | Vite build: port 5175, entry `js/src/main.tsx`, output `js/dist` |
 | `tailwind.config.cjs` | TailwindCSS + DaisyUI config (theme: `power`, prefix: `pc-`) |
-| `tsconfig.json` | TypeScript extends `@power/typescript-config/vite.json`, paths |
+| `tsconfig.json` | TypeScript config, paths |
 | `phpcs.xml` | WordPress coding standards configuration |
 | `phpstan.neon` | PHPStan levels and stubs |
-| `.eslintrc.cjs` | ESLint extends `@power/eslint-config` |
+| `.eslintrc.cjs` | ESLint config |
 | `.prettierrc` | Prettier formatting rules |
 
 ### Documentation Files
@@ -282,28 +277,6 @@ move instructions-php-backend.md instructions\php-backend.md
 move instructions-frontend.md instructions\frontend.md
 move instructions-development.md instructions\development.md
 ```
-
----
-
-## Monorepo Commands
-
-From the **monorepo root** (`powerrepo/`):
-
-```bash
-# Build all apps
-pnpm build
-
-# Dev all apps
-pnpm dev
-
-# Build specific app
-pnpm --filter power-docs build
-
-# Run script in specific package
-pnpm --filter power-docs dev
-```
-
-Turbo pipeline configuration: `turbo.json` at monorepo root.
 
 ---
 

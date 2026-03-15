@@ -1,0 +1,1051 @@
+openapi: 3.0.0
+info:
+  title: Power Docs REST API
+  description: |
+    Power Docs 知識變現套件的 REST API。
+
+    Power Docs 本身僅註冊一個自訂 endpoint（`/power-docs/v1/users`），
+    其餘 CRUD 操作透過 Powerhouse 提供的通用 REST API 進行（`/v2/powerhouse/posts`、`/v2/powerhouse/products`），
+    Power Docs 透過 WordPress filter hooks 擴充這些 API 的回傳欄位。
+
+    商品綁定與用戶授權操作透過 Powerhouse 的 `/v2/powerhouse/products/*` 和 `/v2/powerhouse/limit/*` 端點處理。
+
+    ## 錯誤碼對應規則
+    - **400** = 前置（參數）Rules 驗證失敗
+    - **403** = 前置（狀態）Rules 不符（權限不足）
+    - **404** = 資源找不到
+    - **422** = 前置（狀態）業務規則不滿足
+
+    ## 認證
+    所有管理端 API 需要 WordPress 登入 Cookie 加上 `X-WP-Nonce` Header。
+  version: "1.2.7"
+
+servers:
+  - url: /wp-json/power-docs/v1
+    description: Power Docs 自訂 API
+  - url: /wp-json/v2/powerhouse
+    description: Powerhouse 通用 API（Power Docs 透過 filter 擴充）
+
+tags:
+  - name: Docs
+    description: 知識庫 CRUD（透過 Powerhouse posts API）
+  - name: Products
+    description: 商品綁定管理（透過 Powerhouse products API）
+  - name: Users
+    description: 用戶查詢與授權（Power Docs 自訂 + Powerhouse limit API）
+  - name: System
+    description: 系統層級操作（WordPress hook 觸發，非 REST API）
+
+security:
+  - wpNonce: []
+
+components:
+  securitySchemes:
+    wpNonce:
+      type: apiKey
+      in: header
+      name: X-WP-Nonce
+      description: WordPress REST API nonce，透過 wp_create_nonce('wp_rest') 產生
+
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: 權限不足
+
+    DocBase:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: 文章 ID
+        name:
+          type: string
+          description: 標題（post_title）
+        slug:
+          type: string
+          description: 網址別名
+        status:
+          type: string
+          enum: [publish, draft, pending, private]
+          description: 發佈狀態
+        date_created:
+          type: string
+          format: date-time
+        date_modified:
+          type: string
+          format: date-time
+        menu_order:
+          type: integer
+          description: 排序順序
+        permalink:
+          type: string
+          description: 前台連結
+        parent_id:
+          type: integer
+          description: 父文章 ID（post_parent）
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/Image'
+          description: 特色圖片（縮圖）
+        need_access:
+          type: string
+          enum: ["yes", "no", ""]
+          description: 是否需要購買授權（僅根知識庫）
+        editor:
+          type: string
+          enum: [power-editor, elementor, ""]
+          description: 編輯器類型
+        bg_images:
+          type: array
+          items:
+            $ref: '#/components/schemas/Image'
+          description: 背景圖（僅根知識庫）
+
+    DocDetail:
+      allOf:
+        - $ref: '#/components/schemas/DocBase'
+        - type: object
+          properties:
+            description:
+              type: string
+              description: 文章內容（post_content）
+            short_description:
+              type: string
+              description: 摘要
+            pd_keywords:
+              type: array
+              items:
+                $ref: '#/components/schemas/Keyword'
+              description: 搜尋關鍵字（僅根知識庫）
+            pd_keywords_label:
+              type: string
+              description: 關鍵字標籤文字（僅根知識庫）
+            unauthorized_redirect_url:
+              type: string
+              description: 未授權跳轉網址（僅根知識庫）
+            children:
+              type: array
+              items:
+                $ref: '#/components/schemas/DocBase'
+              description: 子章節
+
+    Keyword:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+
+    Image:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Attachment ID
+        url:
+          type: string
+          description: 圖片 URL
+        width:
+          type: integer
+        height:
+          type: integer
+
+    SortTreeNode:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 文章 ID
+        parent_id:
+          type: string
+          description: 父文章 ID
+        order:
+          type: integer
+          description: 排序順序
+
+    SortRequest:
+      type: object
+      required: [from_tree, to_tree]
+      properties:
+        from_tree:
+          type: array
+          items:
+            $ref: '#/components/schemas/SortTreeNode'
+          description: 排序前的樹狀結構
+        to_tree:
+          type: array
+          items:
+            $ref: '#/components/schemas/SortTreeNode'
+          description: 排序後的樹狀結構
+
+    ProductBase:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: 商品 ID
+        name:
+          type: string
+          description: 商品名稱
+        type:
+          type: string
+          enum: [simple, grouped, external, variable, variation, subscription, variable-subscription, subscription_variation]
+          description: 商品類型
+        status:
+          type: string
+          enum: [publish, draft, pending, private]
+        bound_docs_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoundDocData'
+          description: 已綁定的知識庫授權資料（需透過 meta_keys 請求）
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductBase'
+          description: 商品變體（僅可變商品）
+
+    BoundDocData:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: 知識庫 post ID
+        limit_type:
+          type: string
+          enum: [unlimited, fixed, follow_subscription]
+          description: 期限類型
+        limit_value:
+          type: integer
+          description: 期限數值（limit_type=fixed 時使用）
+        limit_unit:
+          type: string
+          enum: [day, month, year]
+          description: 期限單位
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: 用戶 ID
+        user_login:
+          type: string
+          description: 帳號
+        user_email:
+          type: string
+          description: 電子信箱
+        display_name:
+          type: string
+          description: 顯示名稱
+        user_nicename:
+          type: string
+          description: 別名
+        granted_docs:
+          type: array
+          description: 已授權的知識庫清單（需透過 meta_keys 請求）
+          items:
+            $ref: '#/components/schemas/GrantedDoc'
+
+    GrantedDoc:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: 知識庫 post ID
+        name:
+          type: string
+          description: 知識庫標題
+        expire_date:
+          type: string
+          description: 到期日期（YYYY-MM-DD HH:mm 或空字串代表永久）
+
+    PaginationHeaders:
+      type: object
+      description: 分頁資訊（透過 Response Header 回傳，非 Body）
+      properties:
+        X-WP-Total:
+          type: string
+          description: 總筆數
+        X-WP-TotalPages:
+          type: string
+          description: 總頁數
+        X-WP-CurrentPage:
+          type: string
+          description: 目前頁碼
+        X-WP-PageSize:
+          type: string
+          description: 每頁筆數
+
+paths:
+  # ===== Docs =====
+
+  /posts:
+    get:
+      tags: [Docs]
+      summary: 查詢知識庫列表
+      operationId: getDocs
+      description: |
+        透過 Powerhouse 通用 posts API 查詢知識庫列表。
+        需帶 post_type=pd_doc 篩選，僅回傳根層級（post_parent=0）知識庫。
+        Server: /wp-json/v2/powerhouse
+      parameters:
+        - name: post_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [pd_doc]
+        - name: posts_per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: 每頁筆數
+        - name: paged
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: 頁碼
+        - name: meta_keys[]
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: 額外 meta 欄位（如 need_access, editor, bg_images）
+      responses:
+        '200':
+          description: 知識庫列表
+          headers:
+            X-WP-Total:
+              schema: {type: string}
+              description: 總筆數
+            X-WP-TotalPages:
+              schema: {type: string}
+              description: 總頁數
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DocBase'
+        '400':
+          description: 必要參數未提供（post_type 缺少）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags: [Docs]
+      summary: 建立知識庫/章節
+      operationId: createDoc
+      description: |
+        透過 Powerhouse 通用 posts API 建立知識庫或章節。
+        建立根知識庫時自動設定預設 meta（pd_keywords_label, unauthorized_redirect_url, pd_keywords）。
+        建立子章節時 editor 自動預設為 power-editor。
+        Server: /wp-json/v2/powerhouse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, post_type]
+              properties:
+                name:
+                  type: string
+                  description: 知識庫/章節標題
+                  example: 新知識庫
+                post_type:
+                  type: string
+                  enum: [pd_doc]
+                post_parent:
+                  type: integer
+                  default: 0
+                  description: 父文章 ID（0 為根知識庫）
+                status:
+                  type: string
+                  enum: [publish, draft]
+                  default: draft
+      responses:
+        '200':
+          description: 建立成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocDetail'
+        '400':
+          description: 必要參數未提供
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /posts/{id}:
+    get:
+      tags: [Docs]
+      summary: 查詢知識庫詳情
+      operationId: getDocDetail
+      description: |
+        透過 Powerhouse 通用 posts API 查詢知識庫詳情。
+        bg_images 回傳圖片完整資訊（id, url, width, height）。
+        子章節 editor 為空時預設回傳 power-editor。
+        Server: /wp-json/v2/powerhouse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 知識庫 ID
+        - name: with_description
+          in: query
+          schema:
+            type: string
+            enum: ["true", "false"]
+          description: 是否回傳文章內容
+        - name: meta_keys[]
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: 額外 meta 欄位
+      responses:
+        '200':
+          description: 知識庫詳情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocDetail'
+        '404':
+          description: 文章不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    patch:
+      tags: [Docs]
+      summary: 更新知識庫/章節
+      operationId: updateDoc
+      description: |
+        透過 Powerhouse 通用 posts API 更新知識庫或章節。
+        支援 multipart/form-data 上傳背景圖。
+        bg_images 傳「delete」字串則清除背景圖。
+        更新時自動清除對應知識庫的 transient 快取。
+        editor 切換為 power-editor 時自動清除所有 Elementor meta。
+        Server: /wp-json/v2/powerhouse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 知識庫 ID
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: 標題
+                post_content:
+                  type: string
+                  description: 文章內容
+                slug:
+                  type: string
+                  description: 網址別名
+                status:
+                  type: string
+                  enum: [publish, draft, pending, private]
+                need_access:
+                  type: string
+                  enum: ["yes", "no"]
+                bg_images:
+                  oneOf:
+                    - type: string
+                      format: binary
+                      description: 上傳檔案
+                    - type: string
+                      enum: ["delete"]
+                      description: 刪除現有圖片
+                pd_keywords:
+                  type: string
+                  description: 關鍵字（JSON 字串）
+                pd_keywords_label:
+                  type: string
+                unauthorized_redirect_url:
+                  type: string
+                editor:
+                  type: string
+                  enum: [power-editor, elementor]
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocDetail'
+        '400':
+          description: 無效的文章 ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 文章不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [Docs]
+      summary: 刪除知識庫/章節
+      operationId: deleteDoc
+      description: |
+        透過 Powerhouse 通用 posts API 刪除知識庫或章節。
+        支援批量刪除（ids 陣列）。
+        Server: /wp-json/v2/powerhouse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 知識庫 ID
+      responses:
+        '200':
+          description: 刪除成功
+        '400':
+          description: 必要參數未提供
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 文章不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /posts/sort:
+    post:
+      tags: [Docs]
+      summary: 排序章節
+      operationId: sortPosts
+      description: |
+        透過 Powerhouse 通用 posts API 更新章節排序。
+        前端比對 from_tree 與 to_tree 的差異，僅送出有變更的資料。
+        最大深度限制為 2 層（前端控制）。
+        Server: /wp-json/v2/powerhouse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SortRequest'
+      responses:
+        '200':
+          description: 排序成功
+        '400':
+          description: 必要參數未提供（from_tree 或 to_tree 缺少）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /copy/{id}:
+    post:
+      tags: [Docs]
+      summary: 複製知識庫
+      operationId: copyDoc
+      description: |
+        透過 Powerhouse 通用 copy API 複製知識庫及其所有子章節。
+        複製後所有子章節的 post_type 保持為 pd_doc。
+        Server: /wp-json/v2/powerhouse
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: 要複製的知識庫 ID
+      responses:
+        '200':
+          description: 複製成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocDetail'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: 文章不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ===== Products =====
+
+  /products:
+    get:
+      tags: [Products]
+      summary: 查詢商品列表
+      operationId: getProducts
+      description: |
+        透過 Powerhouse 通用 products API 查詢商品列表。
+        帶 meta_keys[]=bound_docs_data 以取得知識庫綁定資料。
+        可變商品會包含 children 變體子商品，每個變體有各自的 bound_docs_data。
+        Server: /wp-json/v2/powerhouse
+      parameters:
+        - name: posts_per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: 每頁筆數
+        - name: paged
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: 頁碼
+        - name: meta_keys[]
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: 額外 meta 欄位（必須包含 bound_docs_data）
+      responses:
+        '200':
+          description: 商品列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductBase'
+
+  /products/bind-items:
+    post:
+      tags: [Products]
+      summary: 綁定知識庫到商品
+      operationId: bindDocsToProducts
+      description: |
+        透過 Powerhouse 通用 products/bind-items API 將知識庫綁定到商品。
+        支援批量綁定到多個商品。
+        follow_subscription 類型僅限訂閱類型商品。
+        Server: /wp-json/v2/powerhouse
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [product_ids, item_ids, meta_key]
+              properties:
+                product_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 商品 ID 陣列
+                item_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 知識庫 ID 陣列
+                meta_key:
+                  type: string
+                  enum: [bound_docs_data]
+                  description: 綁定的 meta key
+                limit_type:
+                  type: string
+                  enum: [unlimited, fixed, follow_subscription]
+                  description: 期限類型
+                limit_value:
+                  type: integer
+                  description: 期限數值（limit_type=fixed 時使用）
+                limit_unit:
+                  type: string
+                  enum: [day, month, year]
+                  description: 期限單位
+      responses:
+        '200':
+          description: 綁定成功
+        '400':
+          description: 必要參數未提供（product_ids 或 item_ids 缺少）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products/unbind-items:
+    post:
+      tags: [Products]
+      summary: 解除商品知識庫綁定
+      operationId: unbindDocsFromProducts
+      description: |
+        透過 Powerhouse 通用 products/unbind-items API 解除商品與知識庫的綁定。
+        支援批量解除多個商品的綁定。
+        Server: /wp-json/v2/powerhouse
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [product_ids, item_ids, meta_key]
+              properties:
+                product_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 商品 ID 陣列
+                item_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 知識庫 ID 陣列
+                meta_key:
+                  type: string
+                  enum: [bound_docs_data]
+                  description: 綁定的 meta key
+      responses:
+        '200':
+          description: 解除綁定成功
+        '400':
+          description: 必要參數未提供
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /products/update-bound-items:
+    post:
+      tags: [Products]
+      summary: 更新商品知識庫綁定設定
+      operationId: updateBoundDocsSettings
+      description: |
+        透過 Powerhouse 通用 products/update-bound-items API 更新商品綁定的期限設定。
+        Server: /wp-json/v2/powerhouse
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [product_ids, item_ids, meta_key]
+              properties:
+                product_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 商品 ID 陣列
+                item_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 知識庫 ID 陣列
+                meta_key:
+                  type: string
+                  enum: [bound_docs_data]
+                  description: 綁定的 meta key
+                limit_type:
+                  type: string
+                  enum: [unlimited, fixed, follow_subscription]
+                limit_value:
+                  type: integer
+                limit_unit:
+                  type: string
+                  enum: [day, month, year]
+      responses:
+        '200':
+          description: 更新成功
+        '400':
+          description: 必要參數未提供
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ===== Users =====
+
+  /users:
+    get:
+      tags: [Users]
+      summary: 查詢用戶列表
+      operationId: getUsers
+      description: |
+        Power Docs 自訂 endpoint。
+        支援搜尋（ID、帳號、Email、暱稱、顯示名稱）及依已授權知識庫篩選。
+        granted_docs 篩選使用 HAVING COUNT 實現同時擁有所有指定知識庫的交集查詢。
+        分頁資訊透過 Response Header 回傳。
+        Server: /wp-json/power-docs/v1
+      parameters:
+        - name: posts_per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: 每頁筆數
+        - name: paged
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: 頁碼
+        - name: s
+          in: query
+          schema:
+            type: string
+          description: 搜尋關鍵字（模糊搜尋 ID、user_login、user_email、user_nicename、display_name）
+        - name: orderby
+          in: query
+          schema:
+            type: string
+            default: ID
+          description: 排序欄位
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [ASC, DESC]
+            default: DESC
+          description: 排序方向
+        - name: granted_docs[]
+          in: query
+          schema:
+            type: array
+            items:
+              type: integer
+          description: 篩選同時擁有所有指定知識庫授權的用戶（AND 邏輯）
+        - name: meta_keys[]
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          description: 要回傳的額外虛擬欄位（如 granted_docs）
+      responses:
+        '200':
+          description: 用戶列表
+          headers:
+            X-WP-Total:
+              schema: {type: string}
+              description: 總筆數
+            X-WP-TotalPages:
+              schema: {type: string}
+              description: 總頁數
+            X-WP-CurrentPage:
+              schema: {type: string}
+              description: 目前頁碼
+            X-WP-PageSize:
+              schema: {type: string}
+              description: 每頁筆數
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserSummary'
+
+  /limit/grant-users:
+    post:
+      tags: [Users]
+      summary: 開通知識庫權限
+      operationId: grantUsers
+      description: |
+        透過 Powerhouse 通用 limit/grant-users API 為用戶開通知識庫存取權限。
+        在 ph_access_itemmeta 中寫入 expire_date 記錄。
+        支援批量為多個用戶開通。
+        Server: /wp-json/v2/powerhouse
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [user_ids, item_ids]
+              properties:
+                user_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 用戶 ID 陣列
+                item_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 知識庫 ID 陣列
+                expire_date:
+                  type: integer
+                  description: 到期日 Unix timestamp（0 表示永久）
+                  default: 0
+      responses:
+        '200':
+          description: 開通成功
+        '400':
+          description: 必要參數未提供（user_ids 或 item_ids 缺少）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /limit/revoke-users:
+    post:
+      tags: [Users]
+      summary: 撤銷知識庫權限
+      operationId: revokeUsers
+      description: |
+        透過 Powerhouse 通用 limit/revoke-users API 撤銷用戶的知識庫存取權限。
+        移除 ph_access_itemmeta 中的權限記錄。
+        支援批量撤銷多個用戶。
+        Server: /wp-json/v2/powerhouse
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [user_ids, item_ids]
+              properties:
+                user_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 用戶 ID 陣列
+                item_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 知識庫 ID 陣列
+      responses:
+        '200':
+          description: 撤銷成功
+        '400':
+          description: 必要參數未提供
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /limit/update-users:
+    post:
+      tags: [Users]
+      summary: 更新用戶知識庫期限
+      operationId: updateGrantedUsers
+      description: |
+        透過 Powerhouse 通用 limit/update-users API 更新用戶的知識庫到期日。
+        支援批量更新多個用戶。
+        Server: /wp-json/v2/powerhouse
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [user_ids, item_ids]
+              properties:
+                user_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 用戶 ID 陣列
+                item_ids:
+                  type: array
+                  items:
+                    type: string
+                  description: 知識庫 ID 陣列
+                timestamp:
+                  type: integer
+                  description: 新到期日 Unix timestamp（0 表示永久）
+                  default: 0
+      responses:
+        '200':
+          description: 更新成功
+        '400':
+          description: 必要參數未提供
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: 權限不足
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'

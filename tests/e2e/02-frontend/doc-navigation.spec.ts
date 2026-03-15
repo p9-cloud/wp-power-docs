@@ -21,18 +21,18 @@ test.describe('[E2E] 前台導航功能', () => {
 	let chapter2Slug: string
 	let subChapter1Slug: string
 
-	test.beforeAll(async ({ request }, { project }) => {
-		const baseURL = project.use.baseURL || 'http://localhost:8893'
+	test.beforeAll(async ({ request }, workerInfo) => {
+		const baseURL = workerInfo.project.use.baseURL || 'http://localhost:8893'
 		const nonce = getNonce()
 		opts = { request, baseURL, nonce }
 		ids = getSetupIds()
 
 		// 取得所有 slug
 		const [docRes, ch1Res, ch2Res, sub1Res] = await Promise.all([
-			wpGet<any>(opts, `${API.posts}/${ids.docId}`),
-			wpGet<any>(opts, `${API.posts}/${ids.chapter1Id}`),
-			wpGet<any>(opts, `${API.posts}/${ids.chapter2Id}`),
-			wpGet<any>(opts, `${API.posts}/${ids.subChapter1Id}`),
+			wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.docId}`),
+			wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.chapter1Id}`),
+			wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.chapter2Id}`),
+			wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.subChapter1Id}`),
 		])
 
 		docSlug = docRes.data?.slug || ''

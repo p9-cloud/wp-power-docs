@@ -2,6 +2,7 @@
  * E2E 測試資料常數
  *
  * Power Docs 知識庫系統測試共用的資料定義。
+ * 所有測試 ID 前綴使用 'E2E' 方便清理。
  */
 
 /* ── WordPress Admin ─────────────────────────── */
@@ -13,15 +14,29 @@ export const WP_ADMIN = {
 
 /* ── 基礎 URL / 端點 ────────────────────────── */
 
-export const BASE_URL = 'http://localhost:8893'
+export const BASE_URL = process.env.WP_BASE_URL || 'http://localhost:8893'
 
 export const API = {
-	/** Powerhouse 通用 posts API（知識庫 CRUD） */
-	posts: 'powerhouse/v1/posts',
+	/** Powerhouse 通用 posts API（知識庫 CRUD）*/
+	posts: 'v2/powerhouse/posts',
 	/** Powerhouse 通用 posts 排序 */
-	postsSort: 'powerhouse/v1/posts/sort',
+	postsSort: 'v2/powerhouse/posts/sort',
+	/** Powerhouse 通用 posts 複製 */
+	postsCopy: 'v2/powerhouse/copy',
 	/** Powerhouse 通用 products API */
-	products: 'powerhouse/v1/products',
+	products: 'v2/powerhouse/products',
+	/** Powerhouse products 綁定 */
+	productsBind: 'v2/powerhouse/products/bind-items',
+	/** Powerhouse products 解除綁定 */
+	productsUnbind: 'v2/powerhouse/products/unbind-items',
+	/** Powerhouse products 更新綁定設定 */
+	productsUpdateBound: 'v2/powerhouse/products/update-bound-items',
+	/** Powerhouse limit 授予 */
+	limitGrant: 'v2/powerhouse/limit/grant-users',
+	/** Powerhouse limit 撤銷 */
+	limitRevoke: 'v2/powerhouse/limit/revoke-users',
+	/** Powerhouse limit 更新 */
+	limitUpdate: 'v2/powerhouse/limit/update-users',
 	/** Power Docs 自訂 users API */
 	users: 'power-docs/v1/users',
 	/** WooCommerce REST API v3 */
@@ -118,16 +133,33 @@ export const EDGE_STRINGS = {
 	xssScript: '<script>alert("XSS")</script>知識庫',
 	xssImgOnerror: '<img onerror="alert(1)" src=x>Doc',
 	sqlInjection: "' OR 1=1 --",
+	sqlDropTable: "'; DROP TABLE wp_posts; --",
+	pathTraversal: '../../wp-config.php',
 	htmlEntities: '&lt;b&gt;Bold&lt;/b&gt;',
 	unicode: '你好世界 🌍 こんにちは 🎓 Héllo',
 	emoji: '📚🎯🚀💡✅❌🔥 知識庫',
-	longString: 'A'.repeat(500),
+	longString: 'A'.repeat(10000),
 	emptyString: '',
+	whitespaceOnly: '   ',
 	specialChars: '!@#$%^&*()_+-=[]{}|;:,.<>?/~`',
 	rtlText: 'مرحبا بالعالم',
+	koreanText: '안녕하세요 지식창고',
+	japaneseText: 'こんにちは知識ベース',
 	newlines: '第一行\n第二行\n第三行',
-	tabs: '欄位1\t欄位2\t欄位3',
 	nullByte: 'test\x00null',
+}
+
+/* ── 邊界數值 ────────────────────────────────── */
+
+export const EDGE_IDS = {
+	zero: 0,
+	negative: -1,
+	negativeHigh: -999,
+	float: 0.5,
+	maxSafeInt: Number.MAX_SAFE_INTEGER,
+	nonExistent: 999999,
+	abc: 'abc',
+	nullStr: 'null',
 }
 
 /* ── WooCommerce 結帳資料 ────────────────────── */
@@ -148,4 +180,5 @@ export const TIMEOUTS = {
 	apiResponse: 10_000,
 	pageNavigation: 15_000,
 	fileUpload: 30_000,
+	spaLoad: 15_000,
 }

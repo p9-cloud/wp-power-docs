@@ -6,14 +6,23 @@
  * 2. 登入 WordPress Admin、儲存認證狀態
  * 3. 刷新永久連結（flush rewrite rules）
  * 4. 停用 WooCommerce Coming Soon 模式
- * 5. 清除舊 E2E 測試資料
+ * 5. 清除舊 E2E 測試資料（前綴 E2E 的 pd_doc）
  * 6. 建立共用測試資料：知識庫、章節、商品、用戶
  * 7. 儲存建立的 ID 供後續測試使用
  */
 import { chromium, type FullConfig } from '@playwright/test'
 import { applyLcBypass } from './helpers/lc-bypass.js'
-import { extractNonce, wpGet, wpPost, wpDelete, type ApiOptions } from './helpers/api-client.js'
-import { WP_ADMIN, API, TEST_DOC, TEST_FREE_DOC, TEST_CHAPTERS, TEST_SUBSCRIBER, TEST_SUBSCRIBER_NO_ACCESS, TEST_PRODUCT } from './fixtures/test-data.js'
+import { extractNonce, wpGet, wpPost, wpDelete, wpPostForm, wpPatch, type ApiOptions } from './helpers/api-client.js'
+import {
+	WP_ADMIN,
+	API,
+	TEST_DOC,
+	TEST_FREE_DOC,
+	TEST_CHAPTERS,
+	TEST_SUBSCRIBER,
+	TEST_SUBSCRIBER_NO_ACCESS,
+	TEST_PRODUCT,
+} from './fixtures/test-data.js'
 import path from 'path'
 import fs from 'fs'
 
@@ -35,12 +44,58 @@ export interface SetupIds {
 
 /** 讀取 setup 階段建立的 ID */
 export function getSetupIds(): SetupIds {
-	return JSON.parse(fs.readFileSync(SETUP_IDS_FILE, 'utf-8'))
+	return JSON.parse(fs.readFileSync(SETUP_IDS_FILE, 'utf-8')) as SetupIds
 }
 
 /** 讀取 nonce */
 export function getNonce(): string {
 	return fs.readFileSync(NONCE_FILE, 'utf-8').trim()
+}
+
+/** 冪等建立 WordPress 用戶，已存在則回傳現有 ID */
+async function ensureUser(
+	opts: ApiOptions,
+	userData: {
+		username: string
+		password: string
+		email: string
+		firstName: string
+		lastName: string
+	},
+): Promise<number> {
+	// 先搜尋是否已存在
+	try {
+		const searchRes = await opts.request.get(
+			`${opts.baseURL}/wp-json/${API.wpUsers}?search=${encodeURIComponent(userData.email)}`,
+			{ headers: { 'X-WP-Nonce': opts.nonce } },
+		)
+		if (searchRes.ok()) {
+			const users = await searchRes.json() as { id: number; user_email?: string; slug?: string }[]
+			const found = users.find((u) => u.slug === userData.username || u.user_email === userData.email)
+			if (found) return Number(found.id)
+		}
+	} catch { /* ignore */ }
+
+	// 建立新用戶
+	const createRes = await opts.request.post(
+		`${opts.baseURL}/wp-json/${API.wpUsers}`,
+		{
+			headers: { 'X-WP-Nonce': opts.nonce, 'Content-Type': 'application/json' },
+			data: {
+				username: userData.username,
+				password: userData.password,
+				email: userData.email,
+				first_name: userData.firstName,
+				last_name: userData.lastName,
+				roles: ['subscriber'],
+			},
+		},
+	)
+	if (createRes.ok()) {
+		const user = await createRes.json() as { id: number }
+		return Number(user.id)
+	}
+	return 0
 }
 
 async function globalSetup(config: FullConfig): Promise<void> {
@@ -110,30 +165,32 @@ async function globalSetup(config: FullConfig): Promise<void> {
 		// 5. 清除舊 E2E 測試資料
 		console.log('[Global Setup] Cleaning old E2E test data...')
 		try {
-			const { data: oldDocs } = await wpGet<any[]>(opts, `${API.posts}`, {
-				post_type: 'pd_doc',
-				posts_per_page: '100',
-			})
+			const { data: oldDocs } = await wpGet<{ id: number; name: string }[]>(
+				opts,
+				API.posts,
+				{ post_type: 'pd_doc', posts_per_page: '100' },
+			)
 			if (Array.isArray(oldDocs)) {
-				const e2eDocs = oldDocs.filter((d: any) =>
-					typeof d.name === 'string' && d.name.startsWith('E2E'),
+				// 篩選 E2E 前綴的知識庫
+				const e2eDocs = oldDocs.filter(
+					(d) => typeof d.name === 'string' && d.name.startsWith('E2E'),
 				)
 				for (const doc of e2eDocs) {
 					try {
 						// 先刪子章節
-						const { data: children } = await wpGet<any[]>(opts, `${API.posts}`, {
-							post_type: 'pd_doc',
-							parent_id: String(doc.id),
-							posts_per_page: '100',
-						})
+						const { data: children } = await wpGet<{ id: number }[]>(
+							opts,
+							API.posts,
+							{ post_type: 'pd_doc', post_parent: String(doc.id), posts_per_page: '100' },
+						)
 						if (Array.isArray(children)) {
 							for (const child of children) {
 								// 刪孫節點
-								const { data: grandChildren } = await wpGet<any[]>(opts, `${API.posts}`, {
-									post_type: 'pd_doc',
-									parent_id: String(child.id),
-									posts_per_page: '100',
-								})
+								const { data: grandChildren } = await wpGet<{ id: number }[]>(
+									opts,
+									API.posts,
+									{ post_type: 'pd_doc', post_parent: String(child.id), posts_per_page: '100' },
+								)
 								if (Array.isArray(grandChildren)) {
 									for (const gc of grandChildren) {
 										await wpDelete(opts, `${API.posts}/${gc.id}`).catch(() => {})
@@ -155,61 +212,68 @@ async function globalSetup(config: FullConfig): Promise<void> {
 		const ids: Partial<SetupIds> = {}
 
 		// 6.1 建立需授權知識庫
-		const { data: docData } = await wpPost<any>(opts, API.posts, {
+		const { data: docData } = await wpPost<{ id: number }>(opts, API.posts, {
 			post_type: 'pd_doc',
-			post_title: TEST_DOC.name,
+			name: TEST_DOC.name,
 			status: 'publish',
 		})
 		ids.docId = Number(docData.id)
 		console.log(`[Global Setup] Created doc #${ids.docId}`)
 
 		// 設定 need_access=yes
-		await context.request.patch(`${baseURL}/wp-json/${API.posts}/${ids.docId}`, {
-			headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
-			data: { need_access: 'yes' },
-		})
+		await context.request.patch(
+			`${baseURL}/wp-json/${API.posts}/${ids.docId}`,
+			{
+				headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+				data: { need_access: 'yes', unauthorized_redirect_url: TEST_DOC.unauthorizedRedirectUrl },
+			},
+		).catch((e) => console.warn('[Global Setup] set need_access warning:', e))
 
 		// 6.2 建立免費知識庫
-		const { data: freeDocData } = await wpPost<any>(opts, API.posts, {
+		const { data: freeDocData } = await wpPost<{ id: number }>(opts, API.posts, {
 			post_type: 'pd_doc',
-			post_title: TEST_FREE_DOC.name,
+			name: TEST_FREE_DOC.name,
 			status: 'publish',
 		})
 		ids.freeDocId = Number(freeDocData.id)
 		console.log(`[Global Setup] Created free doc #${ids.freeDocId}`)
 
-		await context.request.patch(`${baseURL}/wp-json/${API.posts}/${ids.freeDocId}`, {
-			headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
-			data: { need_access: 'no' },
-		})
+		await context.request.patch(
+			`${baseURL}/wp-json/${API.posts}/${ids.freeDocId}`,
+			{
+				headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
+				data: { need_access: 'no' },
+			},
+		).catch(() => {})
 
-		// 6.3 建立章節
-		const { data: ch1 } = await wpPost<any>(opts, API.posts, {
+		// 6.3 建立章節（depth=1）
+		const { data: ch1 } = await wpPost<{ id: number }>(opts, API.posts, {
 			post_type: 'pd_doc',
-			post_title: TEST_CHAPTERS.chapter1.title,
+			name: TEST_CHAPTERS.chapter1.title,
 			post_parent: ids.docId,
 			status: 'publish',
 		})
 		ids.chapter1Id = Number(ch1.id)
 
-		const { data: ch2 } = await wpPost<any>(opts, API.posts, {
+		const { data: ch2 } = await wpPost<{ id: number }>(opts, API.posts, {
 			post_type: 'pd_doc',
-			post_title: TEST_CHAPTERS.chapter2.title,
+			name: TEST_CHAPTERS.chapter2.title,
 			post_parent: ids.docId,
 			status: 'publish',
 		})
 		ids.chapter2Id = Number(ch2.id)
 
-		const { data: sub1 } = await wpPost<any>(opts, API.posts, {
+		// 6.4 建立孫章節（depth=2）
+		const { data: sub1 } = await wpPost<{ id: number }>(opts, API.posts, {
 			post_type: 'pd_doc',
-			post_title: TEST_CHAPTERS.subChapter1.title,
+			name: TEST_CHAPTERS.subChapter1.title,
 			post_parent: ids.chapter1Id,
 			status: 'publish',
 		})
 		ids.subChapter1Id = Number(sub1.id)
 		console.log(`[Global Setup] Created chapters: ${ids.chapter1Id}, ${ids.chapter2Id}, sub: ${ids.subChapter1Id}`)
 
-		// 6.4 建立 WooCommerce 測試商品
+		// 6.5 建立 WooCommerce 測試商品
 		try {
 			const prodResp = await context.request.post(
 				`${baseURL}/wp-json/${API.wcProducts}`,
@@ -223,7 +287,7 @@ async function globalSetup(config: FullConfig): Promise<void> {
 					},
 				},
 			)
-			const prodData = await prodResp.json()
+			const prodData = await prodResp.json() as { id: number }
 			ids.productId = Number(prodData.id)
 			console.log(`[Global Setup] Created product #${ids.productId}`)
 		} catch (e) {
@@ -231,48 +295,13 @@ async function globalSetup(config: FullConfig): Promise<void> {
 			ids.productId = 0
 		}
 
-		// 6.5 建立測試用戶（subscriber）
+		// 6.6 建立測試用戶
 		for (const userData of [
 			{ ...TEST_SUBSCRIBER, key: 'subscriberId' as const },
 			{ ...TEST_SUBSCRIBER_NO_ACCESS, key: 'noAccessUserId' as const },
 		]) {
-			try {
-				const userResp = await context.request.post(
-					`${baseURL}/wp-json/${API.wpUsers}`,
-					{
-						headers: { 'X-WP-Nonce': nonce, 'Content-Type': 'application/json' },
-						data: {
-							username: userData.username,
-							password: userData.password,
-							email: userData.email,
-							first_name: userData.firstName,
-							last_name: userData.lastName,
-							roles: ['subscriber'],
-						},
-					},
-				)
-				if (userResp.status() === 201 || userResp.status() === 200) {
-					const user = await userResp.json()
-					ids[userData.key] = Number(user.id)
-					console.log(`[Global Setup] Created user ${userData.username} #${ids[userData.key]}`)
-				} else {
-					// 用戶可能已存在，搜尋取得 ID
-					const searchResp = await context.request.get(
-						`${baseURL}/wp-json/${API.wpUsers}?search=${userData.email}`,
-						{ headers: { 'X-WP-Nonce': nonce } },
-					)
-					const users = await searchResp.json()
-					if (Array.isArray(users) && users.length > 0) {
-						ids[userData.key] = Number(users[0].id)
-						console.log(`[Global Setup] Found existing user ${userData.username} #${ids[userData.key]}`)
-					} else {
-						ids[userData.key] = 0
-					}
-				}
-			} catch (e) {
-				console.warn(`[Global Setup] User ${userData.username} creation warning:`, e)
-				ids[userData.key] = 0
-			}
+			ids[userData.key] = await ensureUser(opts, userData)
+			console.log(`[Global Setup] User ${userData.username} #${ids[userData.key]}`)
 		}
 
 		// 7. 儲存 IDs

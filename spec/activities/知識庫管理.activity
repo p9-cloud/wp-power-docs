@@ -1,0 +1,16 @@
+[ACTIVITY] 知識庫管理
+[ACTOR] Admin -> {specs/actors/Admin.md}
+[ACTOR] WordPress -> {specs/actors/WordPress.md}
+
+[STEP:1] @Admin {features/doc/查詢知識庫列表.feature}
+[STEP:2] @Admin {features/doc/建立知識庫.feature}
+[STEP:3] @Admin {features/doc/查詢知識庫詳情.feature}
+[STEP:4] @Admin {features/doc/更新知識庫.feature}
+[DECISION:4a] Admin 是否要管理章節結構？
+  [BRANCH:4a:需要管理章節] @Admin {features/doc/排序章節.feature}
+  [BRANCH:4a:不需要管理章節] -> 6
+[MERGE:4a]
+
+[STEP:5] @Admin {features/doc/複製知識庫.feature}
+[STEP:6] @Admin {features/doc/刪除知識庫.feature}
+[STEP:7] @WordPress {features/compatibility/執行相容性遷移.feature}

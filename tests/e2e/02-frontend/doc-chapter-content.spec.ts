@@ -1,5 +1,5 @@
 /**
- * [E2E] 章節內容渲染 — doc-chapter-content.spec.ts
+ * [P1] 章節內容渲染 — doc-chapter-content.spec.ts
  *
  * 驗證知識庫章節內容的前台渲染：
  * - 章節標題與內容區域
@@ -13,18 +13,18 @@ import { wpGet, wpPost, wpDelete, type ApiOptions } from '../helpers/api-client.
 import { getNonce, getSetupIds, type SetupIds } from '../global-setup.js'
 import { API, EDGE_STRINGS } from '../fixtures/test-data.js'
 
-test.describe('[E2E] 章節內容渲染', () => {
+test.describe('[P1] 章節內容渲染', () => {
 	let opts: ApiOptions
 	let ids: SetupIds
 	let chapter1Slug: string
 
-	test.beforeAll(async ({ request }, { project }) => {
-		const baseURL = project.use.baseURL || 'http://localhost:8893'
+	test.beforeAll(async ({ request }, workerInfo) => {
+		const baseURL = workerInfo.project.use.baseURL || 'http://localhost:8893'
 		const nonce = getNonce()
 		opts = { request, baseURL, nonce }
 		ids = getSetupIds()
 
-		const { data: ch1 } = await wpGet<any>(opts, `${API.posts}/${ids.chapter1Id}`)
+		const { data: ch1 } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${ids.chapter1Id}`)
 		chapter1Slug = ch1?.slug || ''
 	})
 
@@ -78,9 +78,9 @@ console.log(hello);</code></pre>
 				<img src="https://via.placeholder.com/150" alt="測試圖片" />
 			`
 
-			const { data } = await wpPost<any>(opts, API.posts, {
+			const { data } = await wpPost<{ id: number }>(opts, API.posts, {
 				post_type: 'pd_doc',
-				post_title: 'E2E Rich Content Chapter',
+				name: 'E2E 豐富內容章節',
 				post_parent: ids.freeDocId,
 				status: 'publish',
 			})
@@ -95,7 +95,7 @@ console.log(hello);</code></pre>
 				},
 			)
 
-			const { data: detail } = await wpGet<any>(opts, `${API.posts}/${richContentChapterId}`)
+			const { data: detail } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${richContentChapterId}`)
 			richContentSlug = detail?.slug || ''
 		})
 
@@ -165,15 +165,15 @@ console.log(hello);</code></pre>
 		let emptyChapterSlug: string
 
 		test.beforeAll(async () => {
-			const { data } = await wpPost<any>(opts, API.posts, {
+			const { data } = await wpPost<{ id: number }>(opts, API.posts, {
 				post_type: 'pd_doc',
-				post_title: 'E2E Empty Content Chapter',
+				name: 'E2E 空內容章節',
 				post_parent: ids.freeDocId,
 				status: 'publish',
 			})
 			emptyChapterId = Number(data.id)
 
-			const { data: detail } = await wpGet<any>(opts, `${API.posts}/${emptyChapterId}`)
+			const { data: detail } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${emptyChapterId}`)
 			emptyChapterSlug = detail?.slug || ''
 		})
 
@@ -214,9 +214,9 @@ console.log(hello);</code></pre>
 		let longChapterSlug: string
 
 		test.beforeAll(async ({ request }) => {
-			const { data } = await wpPost<any>(opts, API.posts, {
+			const { data } = await wpPost<{ id: number }>(opts, API.posts, {
 				post_type: 'pd_doc',
-				post_title: 'E2E Long Content Chapter',
+				name: 'E2E 長內容章節',
 				post_parent: ids.freeDocId,
 				status: 'publish',
 			})
@@ -235,7 +235,7 @@ console.log(hello);</code></pre>
 				},
 			)
 
-			const { data: detail } = await wpGet<any>(opts, `${API.posts}/${longChapterId}`)
+			const { data: detail } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${longChapterId}`)
 			longChapterSlug = detail?.slug || ''
 		})
 
@@ -278,9 +278,9 @@ console.log(hello);</code></pre>
 		let xssChapterSlug: string
 
 		test.beforeAll(async ({ request }) => {
-			const { data } = await wpPost<any>(opts, API.posts, {
+			const { data } = await wpPost<{ id: number }>(opts, API.posts, {
 				post_type: 'pd_doc',
-				post_title: 'E2E XSS Content Chapter',
+				name: 'E2E XSS 內容章節',
 				post_parent: ids.freeDocId,
 				status: 'publish',
 			})
@@ -296,7 +296,7 @@ console.log(hello);</code></pre>
 				},
 			)
 
-			const { data: detail } = await wpGet<any>(opts, `${API.posts}/${xssChapterId}`)
+			const { data: detail } = await wpGet<{ slug?: string }>(opts, `${API.posts}/${xssChapterId}`)
 			xssChapterSlug = detail?.slug || ''
 		})
 
