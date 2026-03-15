@@ -1,412 +1,156 @@
-# Power Docs — PHP Backend Development Guide
-
-> **📁 Intended location:** `instructions/php-backend.md`
-> **Last Updated:** 2025-01-01
-
+---
+globs:
+  - "inc/**/*.php"
+  - "plugin.php"
+  - "composer.json"
+  - "phpcs.xml"
+  - "phpstan.neon"
 ---
 
-## PHP Namespace & Autoloading
+# PHP Backend Rules
 
-All PHP classes live under the `J7\PowerDocs` namespace, autoloaded via Composer PSR-4:
+## Namespace & Autoload
 
-```json
-"autoload": {
-  "psr-4": {
-    "J7\\PowerDocs\\": "inc/classes/"
-  }
-}
+```
+J7\PowerDocs\           -> inc/classes/
+J7\PowerDocs\Admin      -> inc/classes/Admin/
+J7\PowerDocs\Domains\*  -> inc/classes/Domains/*/
+J7\PowerDocs\Helper     -> inc/classes/Helper/
+J7\PowerDocs\Compatibility -> inc/classes/Compatibility/
+J7\PowerDocs\Utils      -> inc/classes/Utils/
 ```
 
-| Namespace | Directory |
-|---|---|
-| `J7\PowerDocs` | `inc/classes/` |
-| `J7\PowerDocs\Admin` | `inc/classes/Admin/` |
-| `J7\PowerDocs\Domains\Doc` | `inc/classes/Domains/Doc/` |
-| `J7\PowerDocs\Domains\Product` | `inc/classes/Domains/Product/` |
-| `J7\PowerDocs\Domains\User` | `inc/classes/Domains/User/` |
-| `J7\PowerDocs\Domains\Elementor` | `inc/classes/Domains/Elementor/` |
-| `J7\PowerDocs\Helper` | `inc/classes/Helper/` |
-| `J7\PowerDocs\Compatibility` | `inc/classes/Compatibility/` |
-| `J7\PowerDocs\Utils` | `inc/classes/Utils/` |
+## Singleton Pattern（強制）
 
----
-
-## Singleton Pattern
-
-All classes use `SingletonTrait` from `j7-dev/wp-plugin-trait`:
+所有類別使用 `SingletonTrait`，禁止 `new ClassName()`：
 
 ```php
 final class MyClass {
     use \J7\WpUtils\Traits\SingletonTrait;
-
     public function __construct() {
-        // Register hooks here
+        // 僅在此註冊 hooks
         \add_action('init', [ $this, 'my_action' ]);
         \add_filter('some_filter', [ __CLASS__, 'my_static_filter' ], 10, 2);
     }
 }
-
-// Usage: always use ::instance(), never new MyClass()
-MyClass::instance();
+// 使用: MyClass::instance();
 ```
 
-**Rules:**
-- Use `[ $this, 'method' ]` for instance method callbacks
-- Use `[ __CLASS__, 'method' ]` for static method callbacks (preferred for performance)
-- Constructor = hook registration only
-- Business logic in separate methods
+- instance method callback: `[ $this, 'method' ]`
+- static method callback: `[ __CLASS__, 'method' ]`（效能較佳）
+- constructor = hook 註冊，業務邏輯放其他方法
 
----
-
-## Plugin Trait (`PluginTrait`)
-
-`Plugin` uses `PluginTrait` which provides static properties:
+## PluginTrait 靜態屬性
 
 ```php
-Plugin::$dir        // '/var/www/html/wp-content/plugins/power-docs'
-Plugin::$url        // 'https://example.com/wp-content/plugins/power-docs/'
+Plugin::$dir        // 外掛絕對路徑
+Plugin::$url        // 外掛 URL
 Plugin::$kebab      // 'power-docs'
 Plugin::$snake      // 'power_docs'
 Plugin::$app_name   // 'Power Docs'
-Plugin::$is_local   // true when WP_ENV === 'local'
+Plugin::$is_local   // WP_ENVIRONMENT_TYPE === 'local'
+Plugin::load_template('doc-detail', ['key' => 'value']);
 ```
 
-Template loading:
+## 擴展 Powerhouse REST API（優先使用 filter）
+
+### 暴露 Meta
 ```php
-// Loads inc/templates/pages/doc-detail/index.php
-Plugin::load_template('doc-detail');
-
-// With variables
-Plugin::load_template('doc-detail/sider', [
-    'toc_html' => $toc_html,
-]);
-
-// In template, extract variables:
-@['toc_html' => $toc_html] = $args;
-```
-
----
-
-## Adding a New Domain
-
-1. Create directory: `inc/classes/Domains/YourDomain/`
-2. Create `Loader.php`:
-```php
-namespace J7\PowerDocs\Domains\YourDomain;
-
-final class Loader {
-    use \J7\WpUtils\Traits\SingletonTrait;
-
-    public function __construct() {
-        Api::instance();
-        // ... other classes
-    }
-}
-```
-3. Instantiate in `Bootstrap.php`:
-```php
-Domains\YourDomain\Loader::instance();
-```
-
----
-
-## REST API Pattern
-
-Uses `ApiBase` from `j7-dev/wp-plugin-trait`. Route auto-registration from `$apis` array:
-
-```php
-final class Api extends ApiBase {
-    use \J7\WpUtils\Traits\SingletonTrait;
-
-    protected $namespace = 'power-docs';
-
-    protected $apis = [
-        [
-            'endpoint'            => 'items',          // → /wp-json/power-docs/v1/items
-            'method'              => 'get',
-            'permission_callback' => null,             // null = public
-        ],
-        [
-            'endpoint'            => 'items',
-            'method'              => 'post',
-            'permission_callback' => fn() => current_user_can('manage_options'),
-        ],
-        [
-            'endpoint'            => 'items/(?P<id>\d+)',
-            'method'              => 'patch',
-            'permission_callback' => null,
-        ],
-    ];
-
-    public function __construct() {
-        parent::__construct(); // registers rest_api_init hook
-    }
-
-    // Callback naming: {method}_{endpoint_snake}_callback
-    public function get_items_callback(\WP_REST_Request $request): \WP_REST_Response {
-        $params = $request->get_query_params();
-        $params = \J7\WpUtils\Classes\WP::sanitize_text_field_deep($params, false);
-
-        $data = []; // your logic here
-
-        return new \WP_REST_Response($data, 200);
-    }
-
-    public function post_items_callback(\WP_REST_Request $request): \WP_REST_Response {
-        $body = $request->get_json_params();
-        // ...
-        return new \WP_REST_Response(['message' => 'Created'], 201);
-    }
-}
-```
-
----
-
-## Extending Powerhouse REST API via Filters
-
-The Powerhouse plugin provides generic CRUD for posts, users, and products. Extend it via filters instead of writing your own endpoints:
-
-### Expose Additional Post Meta
-
-```php
-// In Doc\Api constructor:
-\add_filter('powerhouse/post/get_meta_keys_array', [ __CLASS__, 'extend_post_meta_keys' ], 10, 2);
-
-public static function extend_post_meta_keys(array $meta_keys, \WP_Post $post): array {
-    if (CPT::POST_TYPE !== $post->post_type) {
-        return $meta_keys; // only process pd_doc posts
-    }
-
-    // Expose a meta key
+\add_filter('powerhouse/post/get_meta_keys_array', [ __CLASS__, 'extend_meta' ], 10, 2);
+public static function extend_meta(array $meta_keys, \WP_Post $post): array {
+    if (CPT::POST_TYPE !== $post->post_type) return $meta_keys;
     if (isset($meta_keys['my_field'])) {
         $meta_keys['my_field'] = \get_post_meta($post->ID, 'my_field', true) ?: '';
     }
-
     return $meta_keys;
 }
 ```
+**注意**: filter 只處理前端 `meta_keys` query param 中宣告的 key（白名單機制）。
 
-**Important:** The filter only processes meta keys that are already in `$meta_keys` (declared by the frontend's `meta_keys` query param). This is a whitelist pattern.
+### 自建端點
+繼承 `ApiBase`，在 `$apis` 陣列定義，callback 命名為 `{method}_{endpoint_snake}_callback`。
 
-### Handle File Uploads in Post Updates
-
-```php
-\add_filter('powerhouse/post/separator_body_params', [ __CLASS__, 'handle_file_upload' ], 10, 2);
-
-public static function handle_file_upload(array $body_params, \WP_REST_Request $request): array {
-    $image_names = ['my_image_field'];
-    $file_params = $request->get_file_params();
-
-    foreach ($image_names as $name) {
-        if (isset($file_params[$name])) {
-            $results = \J7\WpUtils\Classes\WP::upload_files($file_params[$name]);
-            $body_params[$name] = $results[0]['id']; // store attachment ID
-        }
-        // 'delete' string → clear the value
-        if ('delete' === ($body_params[$name] ?? '')) {
-            $body_params[$name] = '';
-            continue;
-        }
-        // Non-numeric, non-delete → no change
-        if (!\is_numeric($body_params[$name])) {
-            unset($body_params[$name]);
-        }
-    }
-    return $body_params;
-}
-```
-
-### Set Default Meta on Post Creation
+## 模板開發
 
 ```php
-\add_filter('powerhouse/post/create_post_args', [ __CLASS__, 'add_default_meta' ], 10, 1);
-
-public static function add_default_meta(array $args): array {
-    if (CPT::POST_TYPE !== $args['post_type']) {
-        return $args;
-    }
-    if (!isset($args['meta_input'])) {
-        $args['meta_input'] = [];
-    }
-    $args['meta_input']['my_default_field'] = 'default_value';
-    return $args;
-}
-```
-
----
-
-## Transient Caching Pattern
-
-```php
-// Get cache key
-$cache_key = Utils::get_cache_key($top_parent_id); // 'power_docs_get_children_posts_html_{id}'
-// Custom key: Utils::get_cache_key($id, 'my_key') → 'power_docs_my_key_{id}'
-
-// Try transient first
-$html = \get_transient($cache_key);
-if (false === $html) {
-    $html = expensive_computation();
-    \set_transient($cache_key, $html, DAY_IN_SECONDS);
-}
-
-// Invalidate on save
-\add_action('save_post_' . CPT::POST_TYPE, function($post_id) {
-    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
-    $top_parent_id = PostUtils::get_top_post_id($post_id);
-    $cache_key = Utils::get_cache_key($top_parent_id);
-    \delete_transient($cache_key);
-}, 10, 1);
-```
-
----
-
-## Access Control API
-
-### Checking Access
-
-```php
-use J7\PowerDocs\Domains\Doc\Access;
-
-// Check if current user can access a doc (by top-level doc ID)
-$can_access = Access::can_access($top_parent_id);
-
-// Check for specific user
-$can_access = Access::can_access($top_parent_id, $user_id);
-
-// Returns true if:
-// 1. need_access meta is 'no' (free access), OR
-// 2. User has a non-expired expire_date in ph_access_itemmeta
-```
-
-### Granting Access
-
-Access is granted via Powerhouse's Limit models:
-```php
-use J7\Powerhouse\Domains\Limit\Models\BoundItemData;
-
-$bound_item = new BoundItemData($doc_post_id, /* expire days */ 365);
-$bound_item->grant_user($user_id, $order); // writes to ph_access_itemmeta
-```
-
-### Querying Granted Items
-
-```php
-use J7\Powerhouse\Domains\Limit\Models\GrantedItems;
-
-$granted_items = new GrantedItems($user_id);
-$docs = $granted_items->get_granted_items([
-    'post_type' => CPT::POST_TYPE,
-]);
-```
-
----
-
-## Template Development
-
-### Template Structure
-
-```php
-<?php
 // inc/templates/pages/my-template/index.php
+global $post;
+@['my_var' => $my_var] = $args ?? [];
 
-use J7\PowerDocs\Plugin;
-use J7\Powerhouse\Plugin as Powerhouse;
-
-global $post; // always declare global $post
-
-// Extract template args
-@[
-    'my_var' => $my_var,
-    'other'  => $other,
-] = $args ?? []; // default to empty array
-
-// Use Powerhouse templates
+// 使用 Powerhouse 模板
 Powerhouse::load_template('hero');
-Powerhouse::load_template('breadcrumb');
 Powerhouse::load_template('card', ['post' => $child_post]);
-Powerhouse::load_template('related-posts/children');
-Powerhouse::load_template('related-posts/prev-next');
-Powerhouse::load_template('search', ['class' => 'w-full']);
 Powerhouse::load_template('pagination', ['query' => $query]);
 
-// Use Power Docs templates
+// 使用 Power Docs 模板
 Plugin::load_template('doc-detail/sider');
 ```
 
-### Inline HTML with Tailwind
-
-PHP templates use Tailwind classes inline in HTML strings:
+PHP 模板中的 Tailwind：用 `/* html */` 註解輔助語法高亮：
 ```php
 echo /* html */ '<div class="tw-container mx-auto px-4">';
-echo /* html */ '<h1 class="text-2xl font-bold mb-8">Title</h1>';
-echo /* html */ '</div>';
 ```
 
-The `/* html */` comment is a convention for syntax highlighting in editors.
+## Transient 快取
 
----
+```php
+$cache_key = Utils::get_cache_key($top_parent_id); // 'power_docs_get_children_posts_html_{id}'
+// 自訂: Utils::get_cache_key($id, 'my_key') -> 'power_docs_my_key_{id}'
 
-## Compatibility / Migration
+// 清除時必須防止 autosave
+if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
+$top_parent_id = PostUtils::get_top_post_id($post_id);
+\delete_transient(Utils::get_cache_key($top_parent_id));
+```
 
-When the plugin is upgraded, `Compatibility::compatibility()` runs via `upgrader_process_complete`.
+## 存取控制
 
-Add new migration code:
+```php
+use J7\PowerDocs\Domains\Doc\Access;
+$can_access = Access::can_access($doc_top_parent_id, $user_id);
+
+// 授權
+use J7\Powerhouse\Domains\Limit\Models\BoundItemData;
+$bound_item = new BoundItemData($doc_post_id, 365);
+$bound_item->grant_user($user_id, $order);
+
+// 查詢已授權項目
+use J7\Powerhouse\Domains\Limit\Models\GrantedItems;
+$granted_items = new GrantedItems($user_id);
+$docs = $granted_items->get_granted_items(['post_type' => CPT::POST_TYPE]);
+```
+
+## 版本遷移
+
+在 `Compatibility::compatibility()` 中新增遷移方法（需冪等）：
 ```php
 public static function compatibility(): void {
-    self::set_editor_meta_to_chapter(); // existing
-    self::my_new_migration();            // your new migration
-}
-
-public static function my_new_migration(): void {
-    // One-time data migration code here
-    // Safe to run multiple times (idempotent)
+    self::set_editor_meta_to_chapter(); // 現有
+    self::my_new_migration();           // 新增
 }
 ```
 
----
+## 程式碼規範
 
-## Error Logging
+- 每個檔案頂部：`declare(strict_types=1);`
+- 全域函式加 `\` 前綴：`\add_action()`, `\get_post_meta()`
+- 全域類別加 `\`：`\WP_Post`, `\WP_REST_Request`
+- 輸入清理：`\sanitize_text_field()`, `\absint()`, `\esc_url_raw()`
+- 輸出跳脫：`\esc_html()`, `\esc_attr()`, `\esc_url()`
+- SQL 準備：`$wpdb->prepare()`
+- 錯誤記錄：`\J7\WpUtils\Classes\WC::log($msg, 'context')`
+
+## 檔案上傳 Pattern
 
 ```php
-// Log to WooCommerce log (power-docs channel)
-\J7\WpUtils\Classes\WC::log($message, 'Context description');
-
-// Example
-try {
-    // risky operation
-} catch (\Throwable $th) {
-    \J7\WpUtils\Classes\WC::log($th->getMessage(), '操作描述 context');
-}
+// powerhouse/post/separator_body_params filter
+$image_names = ['bg_images'];
+// file -> WP::upload_files() -> store attachment ID
+// 'delete' -> clear meta
+// non-numeric, non-delete -> unset (no change)
 ```
 
-Logs viewable at: WooCommerce → Status → Logs → `power-docs-*.log`
+## 新增 Domain
 
----
-
-## Code Quality
-
-### PHPStan
-
-```bash
-vendor/bin/phpstan analyse
-```
-
-Config in `phpstan.neon`. Stubs provided for WordPress and WooCommerce.
-
-### PHPCS (WordPress Coding Standards)
-
-```bash
-vendor/bin/phpcs        # Check
-vendor/bin/phpcbf       # Auto-fix
-```
-
-Config in `phpcs.xml`.
-
-### Common Issues to Avoid
-
-- Always `declare(strict_types=1);` at the top of each file
-- Use `\` prefix for global functions when inside a namespace: `\add_action()`, `\get_post_meta()`, etc.
-- Use `\WP_Post` not `WP_Post` in namespaced files (or import with `use WP_Post`)
-- Sanitize all user input: `\sanitize_text_field()`, `\absint()`, `\esc_url_raw()`
-- Escape all output: `\esc_html()`, `\esc_attr()`, `\esc_url()`
-- Prepare all raw SQL: `$wpdb->prepare()`
+1. 建立 `inc/classes/Domains/MyDomain/Loader.php`
+2. 在 `Bootstrap.php` constructor 中 `Domains\MyDomain\Loader::instance();`
