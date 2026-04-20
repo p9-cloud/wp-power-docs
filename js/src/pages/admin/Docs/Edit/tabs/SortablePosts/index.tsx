@@ -109,7 +109,7 @@ const SortablePostsComponent = ({
 					})
 				},
 				onError: () => {
-					message.loading({
+					message.error({
 						content: '排序儲存失敗',
 						key: 'posts-sorting',
 					})

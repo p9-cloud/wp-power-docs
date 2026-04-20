@@ -35,7 +35,6 @@ export type TParam = {
 	depth: number
 	menu_order: number
 	parent_id?: string
-	name?: string
 }
 
 /**
@@ -62,7 +61,6 @@ export function treeToParams(
 				id: node.id as string,
 				depth: _depth,
 				menu_order: index,
-				name: node?.content?.name,
 				parent_id: _parentId,
 			})
 
