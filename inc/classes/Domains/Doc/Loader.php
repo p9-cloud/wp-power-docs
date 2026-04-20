@@ -18,5 +18,6 @@ final class Loader {
 		Api::instance();
 		Access::instance();
 		CPT::instance();
+		SortHook::instance();
 	}
 }
