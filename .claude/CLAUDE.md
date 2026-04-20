@@ -1,7 +1,7 @@
 # Power Docs — CLAUDE.md
 
 > WordPress 知識庫變現外掛。巢狀 CPT `pd_doc`、WooCommerce 購買授權、Refine.dev SPA 管理後台、三種前台模板。
-> **Plugin Version:** 1.2.7 | **PHP Namespace:** `J7\PowerDocs` | **Text Domain:** `power_docs`
+> **Plugin Version:** 1.2.10 | **PHP Namespace:** `J7\PowerDocs` | **Text Domain:** `power_docs`
 
 ---
 

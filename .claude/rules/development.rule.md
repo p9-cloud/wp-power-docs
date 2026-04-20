@@ -1,6 +1,10 @@
 ---
 globs:
-  - "**"
+  - ".wp-env.json"
+  - ".env"
+  - ".gitignore"
+  - "release/**"
+  - ".github/**"
 ---
 
 # Development Workflow & Setup
