@@ -886,7 +886,9 @@ jobs:
             }
 
       # ── 自動建立 PR ──────────────────────────────────
+      # 守門：僅在 PHPUnit 測試通過（含 auto-fix 通過）時自動開 PR，避免紅測試直接開 PR 污染 review queue
       - name: 自動建立 PR
+        if: steps.final_result.outputs.status == 'passed'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
