@@ -4,7 +4,7 @@
  * Plugin Name:       Power Docs | WordPress 最好的知識變現套件
  * Plugin URI:        https://github.com/zenbuapps/power-docs
  * Description:       輕鬆做出豐富的知識庫頁面，以及輕鬆管理你的知識訂閱客戶
- * Version:           1.3.0
+ * Version:           1.3.1
  * Requires at least: 5.7
  * Requires PHP:      8.0
  * Author:            J7
