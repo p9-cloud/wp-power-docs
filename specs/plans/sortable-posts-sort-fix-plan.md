@@ -776,7 +776,7 @@ Issue #0（SQL Probe）─┬─▶ [決策]
 ## 交接聲明
 
 本計劃遵循 **HOLD SCOPE** 範圍模式，目的為修復已知 bug，**不擴張範圍**。
-Plan 完成後將直接交接 `@wp-workflows:tdd-coordinator` 執行：
+Plan 完成後將直接交接 `@zenbu-powers:tdd-coordinator` 執行：
 
 1. 先開 **Issue #0**（SQL Probe）走 Red → 決策
 2. 依決策拆分並行 **Issue #1 ~ #4**

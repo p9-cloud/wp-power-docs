@@ -96,10 +96,32 @@ jobs:
             exit 0
           fi
 
-          # 尋找最新的 claude/issue-{N}-* 分支
-          git fetch origin 'refs/heads/claude/*:refs/remotes/origin/claude/*' 2>/dev/null || true
-          EXISTING_BRANCH=$(git branch -r --list "origin/claude/issue-${ISSUE_NUM}-*" \
-            --sort=-committerdate | head -1 | tr -d ' ')
+          # 尋找已存在的 issue 分支（依優先序：精確 → 帶後綴 → 舊格式）
+          EXISTING_BRANCH=""
+
+          # 優先：精確匹配 origin/issue/{N}
+          git fetch origin "refs/heads/issue/${ISSUE_NUM}:refs/remotes/origin/issue/${ISSUE_NUM}" 2>/dev/null || true
+          if git rev-parse --verify "origin/issue/${ISSUE_NUM}" >/dev/null 2>&1; then
+            EXISTING_BRANCH="origin/issue/${ISSUE_NUM}"
+          fi
+
+          # 次選：origin/issue/{N}-*（帶後綴的新格式）
+          if [ -z "$EXISTING_BRANCH" ]; then
+            CANDIDATE=$(git branch -r --list "origin/issue/${ISSUE_NUM}-*" \
+              --sort=-committerdate 2>/dev/null | head -1 | tr -d ' ')
+            if [ -n "$CANDIDATE" ]; then
+              EXISTING_BRANCH="$CANDIDATE"
+            fi
+          fi
+
+          # 兜底：origin/claude/issue-{N}-*（舊格式）
+          if [ -z "$EXISTING_BRANCH" ]; then
+            CANDIDATE=$(git branch -r --list "origin/claude/issue-${ISSUE_NUM}-*" \
+              --sort=-committerdate 2>/dev/null | head -1 | tr -d ' ')
+            if [ -n "$CANDIDATE" ]; then
+              EXISTING_BRANCH="$CANDIDATE"
+            fi
+          fi
 
           if [ -n "$EXISTING_BRANCH" ]; then
             LOCAL_BRANCH=$(echo "$EXISTING_BRANCH" | sed 's|origin/||')
@@ -110,7 +132,7 @@ jobs:
           else
             echo "ℹ️ 無已存在的 issue 分支，建立新分支"
 
-            NEW_BRANCH="claude/issue-${ISSUE_NUM}-$(date +%Y%m%d-%H%M%S)"
+            NEW_BRANCH="issue/${ISSUE_NUM}"
             echo "🌿 建立新分支: $NEW_BRANCH"
             git checkout -b "$NEW_BRANCH"
             echo "branch_switched=true" >> $GITHUB_OUTPUT
@@ -247,6 +269,7 @@ jobs:
 
           if [ "$CLARIFIER_OK" != "true" ]; then
             echo "specs_changed=false" >> $GITHUB_OUTPUT
+            echo "specs_available=false" >> $GITHUB_OUTPUT
             echo "❌ Clarifier 全部失敗，跳過 tdd-coordinator"
             exit 0
           fi
@@ -257,6 +280,7 @@ jobs:
           # 檢查 1：是否有任何 commit
           if [ "$CURRENT_SHA" = "$INITIAL_SHA" ]; then
             echo "specs_changed=false" >> $GITHUB_OUTPUT
+            echo "specs_available=false" >> $GITHUB_OUTPUT
             echo "ℹ️ 無任何 commit，clarifier 可能只是提問"
             exit 0
           fi
@@ -295,7 +319,7 @@ jobs:
 
       - name: 動態升級為管線模式（clarifier 已完成規格生成）
         id: dynamic_upgrade
-        if: env.PIPELINE_MODE == 'false' && steps.detect_specs.outputs.specs_changed == 'true'
+        if: env.PR_MODE != 'true' && env.PIPELINE_MODE == 'false' && steps.detect_specs.outputs.specs_changed == 'true'
         run: |
           echo "🔄 Clarifier 已生成 specs，動態升級為管線模式"
           echo "PIPELINE_MODE=true" >> $GITHUB_ENV
@@ -318,7 +342,7 @@ jobs:
       # ══════════════════════════════════════════════════
 
       - name: 組合 Planner Prompt
-        if: steps.detect_specs.outputs.specs_available == 'true' && env.PIPELINE_MODE == 'true'
+        if: env.PR_MODE != 'true' && steps.detect_specs.outputs.specs_available == 'true' && env.PIPELINE_MODE == 'true'
         run: |
           ISSUE_NUM="${{ steps.resolve_branch.outputs.issue_num }}"
           {
@@ -332,7 +356,7 @@ jobs:
 
       - name: "Stage 2: Planner"
         id: planner
-        if: steps.detect_specs.outputs.specs_available == 'true' && env.PIPELINE_MODE == 'true'
+        if: env.PR_MODE != 'true' && steps.detect_specs.outputs.specs_available == 'true' && env.PIPELINE_MODE == 'true'
         continue-on-error: true
         uses: ./.github/actions/claude-retry
         with:
@@ -347,7 +371,7 @@ jobs:
 
       - name: 偵測 Planner 結果
         id: detect_planner
-        if: steps.detect_specs.outputs.specs_available == 'true' && env.PIPELINE_MODE == 'true'
+        if: env.PR_MODE != 'true' && steps.detect_specs.outputs.specs_available == 'true' && env.PIPELINE_MODE == 'true'
         run: |
           echo "planner_ok=${{ steps.planner.outputs.success }}" >> $GITHUB_OUTPUT
           echo "📋 Planner 結果: ${{ steps.planner.outputs.success }}"
@@ -357,7 +381,7 @@ jobs:
       # ══════════════════════════════════════════════════
 
       - name: 組合 tdd-coordinator Prompt
-        if: steps.detect_planner.outputs.planner_ok == 'true'
+        if: env.PR_MODE != 'true' && steps.detect_planner.outputs.planner_ok == 'true'
         run: |
           ISSUE_NUM="${{ steps.resolve_branch.outputs.issue_num }}"
           {
@@ -371,7 +395,7 @@ jobs:
 
       - name: "Stage 3: TDD Coordinator"
         id: tdd
-        if: steps.detect_planner.outputs.planner_ok == 'true'
+        if: env.PR_MODE != 'true' && steps.detect_planner.outputs.planner_ok == 'true'
         continue-on-error: true
         uses: ./.github/actions/claude-retry
         with:
